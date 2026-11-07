@@ -6,10 +6,10 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.urls import reverse
 
-from agents.dashboard_agent import severity
+from agents.dashboard_agent import run_gap_audit, severity
 from agents.listener_agent import should_run_listener
 from agents.llm_client import deterministic_embedding, is_claude_configured, is_groq_configured
-from core.models import Course, Lecture
+from core.models import Course, Lecture, SlideChunk
 
 
 class FallbackClientTests(TestCase):
@@ -67,6 +67,36 @@ class ProductViewTests(TestCase):
         self.assertNotIn("role", self.client.session)
         studio = self.client.get(reverse("core:professor_live"))
         self.assertContains(studio, "Log out")
+
+    def test_dashboard_shows_lesson_brief_before_statistics(self):
+        SlideChunk.objects.create(
+            lecture=self.lecture,
+            slide_number=18,
+            topic="Nyquist Contour Indentation",
+            text="Indent around poles on the imaginary axis.",
+            time_spent_seconds=40,
+        )
+        brief = {
+            "summary": "Nyquist was rushed around the indentation.",
+            "improvements": ["Slow the epsilon limit before counting encirclements."],
+            "animations": [
+                {
+                    "title": "Nyquist indentation",
+                    "why": "Show the semicircle mapping around -1.",
+                }
+            ],
+        }
+        with patch("agents.dashboard_agent.chat_json", return_value=brief):
+            run_gap_audit(self.lecture.id)
+
+        self.lecture.refresh_from_db()
+        self.assertEqual(self.lecture.lesson_brief["summary"], brief["summary"])
+        response = self.client.get(reverse("core:professor_dashboard", args=[self.lecture.id]))
+        content = response.content.decode()
+        self.assertLess(content.index("Lesson analysis"), content.index("Slide Coverage"))
+        self.assertContains(response, "Nyquist was rushed around the indentation.")
+        self.assertContains(response, "Slow the epsilon limit")
+        self.assertContains(response, "Nyquist indentation")
 
     def test_professor_live_renders(self):
         response = self.client.get(reverse("core:professor_live"))

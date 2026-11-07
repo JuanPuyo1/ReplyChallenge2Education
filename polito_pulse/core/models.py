@@ -26,6 +26,7 @@ class Lecture(models.Model):
     recording_started_at = models.DateTimeField(null=True, blank=True)
     recording_ended_at = models.DateTimeField(null=True, blank=True)
     checkin_questions = models.JSONField(default=list, blank=True)
+    lesson_brief = models.JSONField(default=dict, blank=True)
 
     class Meta:
         constraints = [

@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from agents.dashboard_agent import compute_stats
+from agents.dashboard_agent import compute_stats, display_lesson_brief
 from agents.listener_agent import process_transcript_chunk
 from core.models import GapAlert, Lecture, StudentCheckIn
 from core.tasks import submit_audit_job, submit_manim_job
@@ -220,6 +220,7 @@ def professor_dashboard(request: HttpRequest, lecture_id: int) -> HttpResponse:
         {
             "lecture": lecture,
             "gaps": lecture.gaps.all(),
+            "analysis": display_lesson_brief(lecture, stats),
             "stats": stats,
             "critical_count": critical_count,
             "pulse_percent": round((stats["quiz_average"] or 0) * 100),
