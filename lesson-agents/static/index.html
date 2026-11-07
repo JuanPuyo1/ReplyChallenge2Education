@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson Agents</title>
+<style>
+  :root { --bg:#f6f5f2; --card:#fff; --ink:#1d1d1b; --muted:#6b6a65; --line:#e3e1db;
+          --accent:#2f5d50; --warn:#b5651d; --bad:#a33a2c; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; display:grid; gap:16px;
+         grid-template-columns: 340px 1fr; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  h1 { grid-column:1/-1; margin:0; font-size:20px; }
+  h2 { margin:0 0 10px; font-size:15px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  input, textarea, select { width:100%; padding:8px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  textarea { min-height:140px; }
+  button { padding:9px 14px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  button:disabled { opacity:.4; cursor:default; }
+  button.secondary { background:#e9e7e1; color:var(--ink); }
+  .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  #status { font-size:13px; color:var(--muted); margin-top:10px; }
+  #live { max-height:60vh; overflow:auto; }
+  .seg { padding:8px 0; border-bottom:1px solid var(--line); }
+  .seg time { font-size:12px; color:var(--muted); margin-right:6px; }
+  .ann { margin:6px 0 10px; padding:8px 10px; background:#eef3f1; border-left:3px solid var(--accent); font-size:13px; border-radius:4px; }
+  .ann b { color:var(--accent); }
+  .flag { color:var(--warn); }
+  .sev-high { color:var(--bad); font-weight:600; } .sev-medium { color:var(--warn); font-weight:600; }
+  #report h3 { margin:16px 0 4px; }
+  #report ul { margin:4px 0; padding-left:20px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--bad); margin-right:6px; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity:.25; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Lesson Agents</h1>
+
+  <section>
+    <h2>1 · Lesson plan</h2>
+    <label>Title</label>
+    <input id="title" value="Intro to Neural Networks">
+    <label>Language</label>
+    <select id="lang">
+      <option value="">Auto-detect</option><option value="it">Italian</option>
+      <option value="en">English</option><option value="es">Spanish</option>
+    </select>
+    <label>Topics, one per line: <code>name: description</code></label>
+    <textarea id="topics">Perceptron: weights, bias, activation
+Backpropagation: chain rule, gradients
+Overfitting: regularization, dropout</textarea>
+    <label>Chunk length (seconds)</label>
+    <input id="chunk" type="number" min="10" max="120" value="30">
+    <div class="row">
+      <button id="start">Start recording</button>
+      <button id="stop" disabled>Stop</button>
+    </div>
+    <div id="status">Idle.</div>
+
+    <h2 style="margin-top:24px">2 · Analyse</h2>
+    <label>Lesson ID</label>
+    <input id="lessonId" type="number" placeholder="filled in when you start">
+    <div class="row">
+      <button id="analyze" class="secondary">Run Analyst</button>
+      <button id="loadReport" class="secondary">Load last report</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Live transcript &amp; Listener</h2>
+    <div id="live"><p class="placeholder" style="color:var(--muted)">The transcript appears here every chunk.</p></div>
+    <div id="report"></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const MIME = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"]
+  .find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || "";
+const EXT = MIME.includes("webm") ? "webm" : MIME.includes("ogg") ? "ogg" : "m4a";
+
+let lesson = null, stream = null, current = null, timer = null;
+let seq = 0, t0 = 0, queue = Promise.resolve(), pending = 0;
+
+const fmt = ms => { const s = Math.floor(ms / 1000); return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; };
+const topicName = id => (lesson?.topics.find(t => t.id === id) || {}).name;
+function status(html) { $("status").innerHTML = html; }
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+// --- Recording: rotate MediaRecorders so every chunk is a complete, standalone file. ---
+// (With rec.start(timeslice), only the first blob has the WebM header; later blobs can't be
+//  decoded on their own, which is why naive chunk-to-Whisper setups fail.)
+function startRecorder(chunkMs) {
+  const rec = new MediaRecorder(stream, { mimeType: MIME, audioBitsPerSecond: 32000 });
+  const parts = [], mySeq = seq++, startMs = Math.round(performance.now() - t0);
+  rec.ondataavailable = e => { if (e.data.size) parts.push(e.data); };
+  rec.onstop = () => {
+    const dur = Math.round(performance.now() - t0) - startMs;
+    const blob = new Blob(parts, { type: MIME });
+    const isFinal = rec.isFinal === true;
+    pending++;
+    queue = queue.then(() => upload(blob, mySeq, startMs, dur, isFinal));
+  };
+  rec.start();
+  current = rec;
+  // Start the next recorder *before* stopping this one: a few ms of overlap, no gap.
+  timer = setTimeout(() => { const old = current; startRecorder(chunkMs); old.stop(); }, chunkMs);
+}
+
+async function upload(blob, s, startMs, dur, isFinal, attempt = 0) {
+  const fd = new FormData();
+  fd.append("audio", blob, `chunk-${s}.${EXT}`);
+  fd.append("seq", s); fd.append("start_ms", startMs); fd.append("duration_ms", dur);
+  fd.append("final", isFinal);
+  try {
+    const r = await fetch(`/api/lessons/${lesson.id}/chunks`, { method: "POST", body: fd });
+    if (!r.ok) throw new Error(await r.text());
+    render(await r.json(), startMs);
+  } catch (err) {
+    if (attempt < 2) { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); return await upload(blob, s, startMs, dur, isFinal, attempt + 1); }
+    $("live").append(el("p", "flag", `Chunk ${s} failed: ${err.message}`));
+  } finally {
+    if (attempt === 0) pending--;
+    if (!current && pending === 0) status("Stopped. All chunks processed. You can run the Analyst once students submit the form.");
+  }
+}
+
+function render(res, startMs) {
+  const live = $("live");
+  live.querySelector(".placeholder")?.remove();
+  if (res.text) {
+    const d = el("div", "seg"); d.append(el("time", null, fmt(startMs)), document.createTextNode(res.text));
+    live.append(d);
+  }
+  const a = res.annotation;
+  if (a) {
+    const box = el("div", "ann");
+    const name = topicName(a.topic_id) || (a.off_plan_topic ? `Off-plan: ${a.off_plan_topic}` : "No planned topic");
+    box.append(el("b", null, `${name} `), document.createTextNode(`(${Math.round((a.confidence || 0) * 100)}%) — ${a.summary}`));
+    for (const [label, list] of [["Examples", a.examples_given], ["Student questions", a.student_questions]])
+      if (list?.length) box.append(el("div", null, `${label}: ${list.join(" · ")}`));
+    if (a.clarity_signals?.length) box.append(el("div", "flag", `Clarity: ${a.clarity_signals.join(" · ")}`));
+    live.append(box);
+  }
+  live.scrollTop = live.scrollHeight;
+}
+
+$("start").onclick = async () => {
+  if (!MIME) return status("This browser has no supported MediaRecorder audio format.");
+  const topics = $("topics").value.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+    const i = l.indexOf(":"); return i < 0 ? { name: l } : { name: l.slice(0, i).trim(), description: l.slice(i + 1).trim() };
+  });
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+  } catch (e) { return status("Microphone permission denied."); }
+  const r = await fetch("/api/lessons", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: $("title").value, language: $("lang").value || null, topics }) });
+  if (!r.ok) return status("Could not create lesson: " + await r.text());
+  lesson = await r.json();
+  $("lessonId").value = lesson.id;
+  $("live").innerHTML = ""; $("report").innerHTML = "";
+  seq = 0; t0 = performance.now();
+  startRecorder(Math.max(10, +$("chunk").value || 30) * 1000);
+  $("start").disabled = true; $("stop").disabled = false;
+  status(`<span class="dot"></span>Recording lesson #${lesson.id}…`);
+};
+
+$("stop").onclick = () => {
+  clearTimeout(timer);
+  const last = current; current = null;
+  last.isFinal = true; last.stop();
+  stream.getTracks().forEach(t => t.stop());
+  $("start").disabled = false; $("stop").disabled = true;
+  status("Stopping… finishing the last chunks.");
+};
+
+// --- Analyst ---
+function showReport(rep) {
+  const box = $("report"); box.innerHTML = "";
+  box.append(el("h2", null, "Analyst report"), el("h3", null, rep.headline),
+    el("p", null, `Verdict: ${rep.overall_verdict} · average ${rep.avg_overall_rating}/5 from ${rep.n_responses} students`));
+  for (const t of rep.topics_needing_attention) {
+    const h = el("h3"); h.append(document.createTextNode(t.topic + " — "), el("span", `sev-${t.severity}`, t.severity)); box.append(h);
+    const ul = el("ul");
+    [...t.evidence, ...t.likely_causes.map(c => "Cause: " + c), ...t.suggestions.map(s => "Next time: " + s)]
+      .forEach(x => ul.append(el("li", null, x)));
+    box.append(ul);
+  }
+  for (const [title, key] of [["Strengths", "strengths"], ["Weaknesses", "weaknesses"], ["What students said", "comment_themes"], ["Next lesson plan", "next_lesson_plan"]]) {
+    if (!rep[key]?.length) continue;
+    box.append(el("h3", null, title)); const ul = el("ul"); rep[key].forEach(x => ul.append(el("li", null, x))); box.append(ul);
+  }
+  box.scrollIntoView({ behavior: "smooth" });
+}
+
+$("analyze").onclick = async () => {
+  const id = $("lessonId").value; if (!id) return;
+  status("Analyst running…");
+  const r = await fetch(`/api/lessons/${id}/analyze`, { method: "POST" });
+  if (!r.ok) return status("Analyst: " + (await r.json()).detail);
+  showReport((await r.json()).report); status("Report ready.");
+};
+$("loadReport").onclick = async () => {
+  const id = $("lessonId").value; if (!id) return;
+  const r = await fetch(`/api/lessons/${id}/report`);
+  if (!r.ok) return status("No report yet.");
+  showReport((await r.json()).report);
+};
+</script>
+</body>
+</html>
