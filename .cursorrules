@@ -1,0 +1,46 @@
+# Project: PoliTo Pulse — AI Lecture Telemetry & Manim Remediation Platform
+
+## 1. Tech Stack & Architecture
+- **Backend:** Django 5.x, Python 3.11+, FastMCP (Model Context Protocol server for agent tools), Qdrant (Vector DB for `course_slides`, `past_exams`, and `manim_templates`).
+- **Frontend:** Django Templates + HTMX (`hx-get`, `hx-post`, `hx-ext="sse"`, `hx-swap`) + TailwindCSS + DaisyUI (strictly customized to strip default cartoon roundness/colors).
+- **Motion & Alerts:** GSAP (GreenSock) for layout/stagger animations + SweetAlert2 (styled minimally via custom CSS classes, never default bulky popups).
+
+## 2. Design Engineering Rules (`emil-design-eng` & `better-ui`)
+You must strictly apply the principles of Emil Kowalski (`emilkowalski/skills`) and Jakub Krehel (`jakubkrehel/skills`):
+1. **Typography (`Josefin Sans`):**
+   - Import Google Font `Josefin Sans:wght@300;400;500;600;700` and `JetBrains Mono:wght@400;500`.
+   - Apply `font-['Josefin_Sans']` globally. Since Josefin Sans has a tall geometric x-height, use `tracking-tight` (`-0.02em`) on headings and `leading-relaxed` on body text.
+   - Always apply `tabular-nums` to recording timers, similarity scores, and quiz percentages so numbers never jitter during live HTMX updates.
+2. **Surface & Optical Precision (`better-ui`):**
+   - Never use heavy shadows. Use `bg-[#FAFAFA]` for the page background and `bg-white` for cards.
+   - Use `1px` borders with `border-zinc-200/80` (`rgba(0,0,0,0.07)`) instead of thick outlines.
+   - Concentric border radii: If an outer card has `rounded-2xl` (`16px`) and `p-2` (`8px` padding), the inner video player or button MUST have `rounded-xl` (`8px`) so curves align optically.
+3. **Choreographed Motion (`emil-design-eng`):**
+   - All micro-interactions (hover, active press) must be under `200ms` using custom cubic-bezier easing: `transition-all duration-150 ease-[cubic-bezier(0.22,1,0.36,1)]`.
+   - Add subtle tactile press feedback on all buttons: `active:scale-[0.98]`.
+   - Never let HTMX swaps pop in abruptly. Hook into `htmx:afterSwap` with GSAP (`gsap.fromTo(..., { opacity: 0, y: 8, filter: 'blur(4px)' }, { opacity: 1, y: 0, filter: 'blur(0px)', duration: 0.35, ease: 'power3.out' })`).
+
+## 3. Core Views & HTMX Flows to Build
+
+### A. Login View (`/login`)
+- Single clean view with an HTMX/Alpine or pure JS segmented tab switch between **Professor** and **Student**.
+- Include quick-login demo buttons that authenticate a demo Professor or Student session in 1 click for hackathon judges.
+
+### B. Professor Live Recording Studio (`/professor/live`)
+- **Careful Audio Handling:** Use the browser `MediaRecorder` API + `AudioContext` (`AnalyserNode`) to draw a smooth 60fps minimalist bar waveform in an `<svg>` or `<canvas>`.
+- Every 15–30 seconds while recording, slice the audio blob and send it via `fetch` / `hx-post` to `/api/lectures/<id>/audio-chunk/`.
+- The Django endpoint transcribes the chunk, runs **Agent 1 (Listener Agent)** via MCP to match the spoken concepts against Qdrant `course_slides`, and returns an HTMX partial appended (`hx-swap="beforeend"`) to `#transcript-feed` with the cleaned text, LaTeX math, and matched Slide badge.
+- Clicking **"End Lecture & Generate Audit"** stops the `MediaRecorder`, triggers a minimalist SweetAlert2 toast, and redirects/swaps into the Feedback Dashboard.
+
+### C. Professor Feedback & Gap Dashboard (`/professor/dashboard/<lecture_id>`)
+- Displays output from **Agent 2 (Dashboard Agent)** which correlates: (1) Audio transcript time-per-slide, (2) Student check-in form answers, and (3) Qdrant `past_exams` importance.
+- Render **Pedagogical Gap Cards** sorted by severity.
+- Each Gap Card has an HTMX button:
+  `hx-post="/api/lectures/<id>/generate-manim/" hx-vals='{"topic_id": "..."}' hx-target="#manim-slot-{{ topic.id }}" hx-swap="innerHTML"`
+- When clicked, immediately return a minimalist skeleton state that polls `hx-get="/api/tasks/<task_id>/status/" hx-trigger="every 2s"`.
+- Once **Agent 3 (Manim Agent)** finishes rendering the `-ql` MP4 video, swap the polling skeleton with the `<video autoplay loop muted playsinline controls>` component and fire a custom `HX-Trigger: {"manimComplete": "..."}` header to show a sleek SweetAlert2 notification.
+
+### D. Student Daily Lectures & Animations Portal (`/student/dashboard`)
+- Horizontal date selector at the top (`hx-get="/student/lectures/?date=2026-11-07" hx-target="#student-lecture-content"`).
+- **Section 1 (Live Check-in Form):** Minimalist 3-question conceptual pulse form generated from today's lecture. Submitting via `hx-post` swaps the form with an instant feedback summary and updates the Professor's dashboard counters.
+- **Section 2 (Today's Manim Animations):** Grid of rendered Manim videos for today's theorems, complete with the exact slide notation from Qdrant and a collapsible "Why this matters for the final exam" footer.
