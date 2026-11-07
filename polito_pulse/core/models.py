@@ -37,6 +37,18 @@ class Lecture(models.Model):
     def __str__(self) -> str:
         return f"{self.course.code} Lecture {self.number}"
 
+    def pulse_questions(self) -> list[dict]:
+        """Check-in questions as [{key, text, topic}]; tolerates legacy plain strings."""
+        questions = []
+        for index, item in enumerate(self.checkin_questions[:3], start=1):
+            if isinstance(item, dict):
+                text, topic = str(item.get("text", "")), str(item.get("topic", ""))
+            else:
+                text, topic = str(item), ""
+            if text:
+                questions.append({"key": f"q{index}", "text": text, "topic": topic})
+        return questions
+
 
 class SlideChunk(models.Model):
     lecture = models.ForeignKey(Lecture, on_delete=models.CASCADE, related_name="slides")
@@ -64,6 +76,9 @@ class TranscriptSegment(models.Model):
     cleaned_text = models.TextField(blank=True)
     matched_slide_number = models.PositiveIntegerField(null=True, blank=True)
     similarity_score = models.FloatField(default=0.0)
+    # Teaching signals from the Listener: topic, key_concepts, examples_given,
+    # student_questions, clarity_signals.
+    signals = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -85,6 +100,7 @@ class StudentCheckIn(models.Model):
     student_ref = models.CharField(max_length=80, blank=True)
     answers = models.JSONField(default=dict)
     score = models.FloatField(default=0.0)
+    topic_scores = models.JSONField(default=dict, blank=True)
     misconception = models.CharField(max_length=300, blank=True)
     submitted_at = models.DateTimeField(auto_now_add=True)
 
@@ -110,11 +126,13 @@ class GapAlert(models.Model):
     title = models.CharField(max_length=240)
     severity = models.CharField(max_length=16, choices=Severity.choices, db_index=True)
     audio_time_seconds = models.PositiveIntegerField(default=0)
-    quiz_score = models.FloatField(default=0.0)
+    quiz_score = models.FloatField(null=True, blank=True)
     exam_weight = models.FloatField(default=0.0)
     exam_frequency = models.CharField(max_length=100, blank=True)
     slide_number = models.PositiveIntegerField(null=True, blank=True)
     recommendation = models.TextField()
+    evidence = models.JSONField(default=dict, blank=True)
+    teaching_actions = models.JSONField(default=list, blank=True)
     manim_status = models.CharField(
         max_length=32, choices=ManimStatus.choices, default=ManimStatus.IDLE
     )

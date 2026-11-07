@@ -39,6 +39,7 @@ class Command(BaseCommand):
                 "past_exam_count": 5,
             },
         )
+        self._seed_previous_lecture(course)
         lecture, _ = Lecture.objects.update_or_create(
             course=course,
             number=14,
@@ -47,108 +48,128 @@ class Command(BaseCommand):
                 "date": date(2026, 11, 6),
                 "status": Lecture.Status.AUDITED,
                 "checkin_questions": [
-                    "Why does the contour indent around imaginary-axis poles?",
-                    "What does N = Z - P mean for closed-loop stability?",
-                    "How is phase margin related to damping?",
+                    {
+                        "text": "How do you trace $G(j\\omega)$ as $\\omega$ goes from $0$ to $\\infty$?",
+                        "topic": "Nyquist Plot Construction",
+                    },
+                    {
+                        "text": "Why must the Nyquist contour indent around a pole on the imaginary axis?",
+                        "topic": "Nyquist Contour Indentation",
+                    },
+                    {
+                        "text": "How does the phase margin $\\varphi_m$ relate to closed-loop damping?",
+                        "topic": "Bode Phase Margin",
+                    },
                 ],
             },
         )
 
-        for number in range(1, 33):
-            nyquist = number <= 20
-            topic = "Nyquist Contour Indentation" if nyquist else "Bode Phase Margin"
-            text = (
-                "Nyquist contour, imaginary-axis pole indentation, and N = Z - P."
-                if nyquist
-                else "Bode gain crossover, phase margin, and closed-loop damping."
-            )
-            SlideChunk.objects.update_or_create(
-                lecture=lecture,
-                slide_number=number,
-                defaults={
-                    "topic": topic,
-                    "text": text,
-                    "latex_symbols": (
-                        [r"j\omega", r"\varepsilon \to 0^+", "N = Z - P"]
-                        if nyquist
-                        else [r"\omega_c", r"\varphi_m", r"G(j\omega)"]
-                    ),
-                    "time_spent_seconds": 1 if number <= 28 else 0,
-                    "best_similarity": 0.94 if number in (18, 24) else 0.0,
-                },
-            )
-
-        transcript_rows = [
-            (
-                1,
-                2472000,
-                "The Nyquist contour must detour around poles on the imaginary axis.",
-                18,
-                0.94,
-            ),
-            (
-                2,
-                2498000,
-                "Count clockwise encirclements of minus one and reconcile N equals Z minus P.",
-                19,
-                0.91,
-            ),
-            (
-                3,
-                2524000,
-                "At omega c the Bode phase margin predicts relative damping.",
-                24,
-                0.96,
-            ),
+        # (topic, slides, per-slide second overrides, default seconds, text, symbols).
+        # Gain Margin is never reached in the audio.
+        topic_plan = [
+            ("Nyquist Plot Construction", range(1, 16), {}, 36,
+             "Trace G(jω) from ω = 0 to ∞ and mirror it for negative frequencies.",
+             [r"G(j\omega)", r"\omega \in [0, \infty)"]),
+            ("Nyquist Contour Indentation", range(16, 21), {18: 26, 19: 19}, 0,
+             "Indent around imaginary-axis poles with a semicircle of radius ε; N = Z - P.",
+             [r"j\omega", r"\varepsilon \to 0^+", "N = Z - P"]),
+            ("Bode Phase Margin", range(21, 29), {}, 48,
+             "Phase margin at the gain crossover ω_c measures relative stability and damping.",
+             [r"\omega_c", r"\varphi_m", r"G(j\omega)"]),
+            ("Gain Margin", range(29, 33), {}, 0,
+             "Gain margin at the phase crossover ω_pc.",
+             [r"\omega_{pc}", r"G_m"]),
         ]
-        for seq, start, raw, slide, score in transcript_rows:
-            TranscriptSegment.objects.update_or_create(
+        for topic, numbers, overrides, seconds, text, symbols in topic_plan:
+            for number in numbers:
+                SlideChunk.objects.update_or_create(
+                    lecture=lecture,
+                    slide_number=number,
+                    defaults={
+                        "topic": topic,
+                        "text": text,
+                        "latex_symbols": symbols,
+                        "time_spent_seconds": overrides.get(number, seconds),
+                        "best_similarity": 0.94 if number in (6, 18, 24) else 0.0,
+                    },
+                )
+        lecture.gaps.exclude(topic__in=[row[0] for row in topic_plan]).delete()
+
+        TranscriptSegment.objects.filter(lecture=lecture).delete()
+        transcript_rows = [
+            (600000, 6, 0.90,
+             "To build the Nyquist plot, trace $G(j\\omega)$ from zero to infinity. "
+             "For example, take $G(s) = \\frac{1}{s+1}$.",
+             {"topic": "Nyquist Plot Construction",
+              "examples_given": ["$G(s) = \\frac{1}{s+1}$ traced for $\\omega \\in [0, \\infty)$"]}),
+            (2472000, 18, 0.94,
+             "The Nyquist contour must detour around poles on the imaginary axis as "
+             "$\\varepsilon \\to 0^+$.",
+             {"topic": "Nyquist Contour Indentation",
+              "student_questions": ["Why do we go around the pole and not through it?"],
+              "clarity_signals": ["The $\\varepsilon$-semicircle mapping was derived in a single step."]}),
+            (2498000, 19, 0.91,
+             "Count clockwise encirclements of $-1$ and reconcile them with $N = Z - P$. "
+             "Quickly, let's move on.",
+             {"topic": "Nyquist Contour Indentation",
+              "student_questions": ["Does the small semicircle map to a large arc clockwise or counter-clockwise?"],
+              "clarity_signals": ["Professor moved on quickly; the step may need a recap."]}),
+            (2524000, 24, 0.96,
+             "At $\\omega_c$ the Bode phase margin predicts relative damping. "
+             "For example, $G(s) = \\frac{10}{s(s+2)}$.",
+             {"topic": "Bode Phase Margin",
+              "examples_given": ["Phase margin of $G(s) = \\frac{10}{s(s+2)}$"]}),
+        ]
+        for seq, (start, slide, score, cleaned, signals) in enumerate(transcript_rows, start=1):
+            TranscriptSegment.objects.create(
                 lecture=lecture,
                 seq=seq,
-                defaults={
-                    "start_ms": start,
-                    "duration_ms": 26000,
-                    "raw_text": raw,
-                    "cleaned_text": raw.replace(
-                        "N equals Z minus P", "$N = Z - P$"
-                    ).replace("omega c", "$\\omega_c$"),
-                    "matched_slide_number": slide,
-                    "similarity_score": score,
+                start_ms=start,
+                duration_ms=26000,
+                raw_text=cleaned,
+                cleaned_text=cleaned,
+                matched_slide_number=slide,
+                similarity_score=score,
+                signals={
+                    "examples_given": [],
+                    "student_questions": [],
+                    "clarity_signals": [],
+                    **signals,
                 },
             )
 
         StudentCheckIn.objects.filter(lecture=lecture).delete()
+        values = {"clear": 1.0, "recap": 0.55, "confused": 0.25}
+        questions = lecture.pulse_questions()
+        # One row per student: answers to q1 (plot), q2 (indentation), q3 (Bode).
         responses = [
-            (0.31, "Imaginary-axis pole indentation"),
-            (0.55, "Clockwise encirclement sign"),
-            (0.62, "Imaginary-axis pole indentation"),
-            (0.78, ""),
-            (0.85, ""),
+            ("clear", "confused", "recap"),
+            ("clear", "confused", "recap"),
+            ("recap", "recap", "clear"),
+            ("clear", "confused", "recap"),
+            ("clear", "recap", "recap"),
+            ("recap", "confused", "recap"),
         ]
-        for index, (score, misconception) in enumerate(responses, start=1):
+        for index, row in enumerate(responses, start=1):
+            answers = {question["key"]: answer for question, answer in zip(questions, row)}
+            topic_scores = {
+                question["topic"]: values[answer] for question, answer in zip(questions, row)
+            }
+            confused = [q["topic"] for q, answer in zip(questions, row) if answer == "confused"]
             StudentCheckIn.objects.create(
                 lecture=lecture,
                 student_ref=f"demo-{index:02d}",
-                answers={"q1": "recap", "q2": "confused", "q3": "clear"},
-                score=score,
-                misconception=misconception,
+                answers=answers,
+                score=sum(topic_scores.values()) / len(topic_scores),
+                topic_scores=topic_scores,
+                misconception=confused[0] if confused else "",
             )
 
         run_gap_audit(lecture.id)
         nyquist_gap = lecture.gaps.get(topic="Nyquist Contour Indentation")
         bode_gap = lecture.gaps.get(topic="Bode Phase Margin")
-        nyquist_gap.quiz_score = 0.31
-        nyquist_gap.audio_time_seconds = 45
-        nyquist_gap.slide_number = 18
-        nyquist_gap.severity = GapAlert.Severity.CRITICAL
         nyquist_gap.manim_status = GapAlert.ManimStatus.IDLE
-        nyquist_gap.save()
-        bode_gap.quiz_score = 0.62
-        bode_gap.audio_time_seconds = 72
-        bode_gap.slide_number = 24
-        bode_gap.severity = GapAlert.Severity.WARNING
-        bode_gap.manim_status = GapAlert.ManimStatus.COMPLETED
-        bode_gap.save()
+        nyquist_gap.save(update_fields=["manim_status", "updated_at"])
 
         self._seed_animation(lecture, nyquist_gap, "nyquist", completed=False)
         self._seed_animation(lecture, bode_gap, "bode", completed=True)
@@ -165,6 +186,50 @@ class Command(BaseCommand):
                 "Qdrant synchronization timed out; local demo data is ready."
             )
         self.stdout.write(self.style.SUCCESS(f"Seeded {course} / Lecture {lecture.number}"))
+
+    def _seed_previous_lecture(self, course: Course) -> None:
+        """Lecture 13 flagged Bode Phase Margin and planned a recap; Lecture 14 shows the result."""
+        previous, _ = Lecture.objects.update_or_create(
+            course=course,
+            number=13,
+            defaults={
+                "title": "Frequency Response and Bode Diagrams",
+                "date": date(2026, 11, 4),
+                "status": Lecture.Status.AUDITED,
+                "lesson_brief": {
+                    "next_lecture": {
+                        "recap": [
+                            {
+                                "topic": "Bode Phase Margin",
+                                "slides": "21–28",
+                                "minutes": 5,
+                                "severity": GapAlert.Severity.CRITICAL,
+                                "why": "34% comprehension, 50s taught",
+                                "action": "Read $\\varphi_m$ off the Bode plot on a worked example.",
+                            }
+                        ],
+                        "carry_over": [],
+                        "student_questions": [],
+                        "warm_up_question": "Where on the Bode plot do you read the phase margin?",
+                        "total_minutes": 5,
+                    }
+                },
+            },
+        )
+        GapAlert.objects.update_or_create(
+            lecture=previous,
+            topic="Bode Phase Margin",
+            defaults={
+                "title": "Bode Phase Margin",
+                "severity": GapAlert.Severity.CRITICAL,
+                "audio_time_seconds": 50,
+                "quiz_score": 0.34,
+                "exam_weight": 0.6,
+                "exam_frequency": "Appears in 3/5 Past Appelli",
+                "slide_number": 24,
+                "recommendation": "Animate the gain crossover and phase trace together.",
+            },
+        )
 
     def _seed_animation(
         self, lecture: Lecture, gap: GapAlert, scene_key: str, *, completed: bool
@@ -191,7 +256,7 @@ class Command(BaseCommand):
                     if scene_key == "nyquist"
                     else "Linked to 2024 Appello Q2"
                 ),
-                "published": bool(video_url),
+                "published": bool(video_url) and completed,
                 "rendered_at": timezone.now() if video_url else None,
             },
         )

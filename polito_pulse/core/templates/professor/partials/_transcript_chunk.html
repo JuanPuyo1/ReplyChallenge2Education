@@ -2,6 +2,15 @@
   <div class="min-w-0 flex-1">
     <time class="telemetry text-xs text-zinc-500">{{ segment.clock }}</time>
     <p class="mt-2 text-sm leading-5">{{ segment.cleaned_text|default:segment.raw_text }}</p>
+    {% with signals=segment.signals %}
+    {% if signals.examples_given or signals.student_questions or signals.clarity_signals %}
+    <div class="mt-2 flex flex-wrap gap-1.5 text-xs">
+      {% for item in signals.student_questions %}<span class="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700" title="{{ item }}">❓ Student question</span>{% endfor %}
+      {% for item in signals.examples_given %}<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700" title="{{ item }}">✓ Worked example</span>{% endfor %}
+      {% for item in signals.clarity_signals %}<span class="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700" title="{{ item }}">⚠ {{ item|truncatechars:60 }}</span>{% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
   </div>
   {% if segment.matched_slide_number %}
   <span class="telemetry whitespace-nowrap rounded-full bg-zinc-100 px-3 py-1.5 text-xs text-zinc-500">

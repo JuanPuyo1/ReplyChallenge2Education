@@ -1,23 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Gap Audit — PoliBrige{% endblock %}
+{% block title %}Lecture Feedback — PoliBrige{% endblock %}
 {% block content %}
 <main class="mx-auto min-h-screen max-w-[1440px] p-6 lg:p-16">
-  <header class="flex items-center justify-between">
+  <header class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-semibold">Lecture {{ lecture.number }} — Feedback &amp; Gap Audit</h1>
-      <p class="text-sm text-zinc-500">Audio coverage × student pulse × past-exam importance</p>
+      <h1 class="text-2xl font-semibold">Lecture {{ lecture.number }} — Teaching Feedback</h1>
+      <p class="text-sm text-zinc-500">Time taught × student comprehension × past-exam importance</p>
     </div>
     <div class="flex items-center gap-3">
       <a href="{% url 'core:professor_live' %}" class="pressable rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm">Return to Studio</a>
+      <a href="{% url 'core:next_lecture_plan' lecture.id %}" class="pressable rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">Plan Lecture {{ lecture.number|add:1 }} →</a>
       {% include "partials/_logout_button.html" %}
-      <span class="telemetry rounded-full bg-zinc-100 px-3 py-1.5 text-xs text-zinc-500">/professor/dashboard</span>
     </div>
   </header>
 
-  <section class="surface mt-8 p-5" id="lesson-analysis">
+  {% if followup %}
+  <section class="surface mt-8 border-emerald-500 p-5" id="plan-followup">
+    <p class="text-sm font-medium text-zinc-500">Did Lecture {{ followup.lecture_number }}'s recap work?</p>
+    <div class="mt-3 flex flex-col gap-3">
+      {% for row in followup.rows %}
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <span class="text-base font-semibold">{{ row.topic }}</span>
+          <span class="telemetry text-sm">
+            <span class="text-zinc-400">{{ row.before }}%</span>
+            <span class="text-zinc-400">→</span>
+            <span class="{% if row.delta > 0 %}text-emerald-600{% else %}text-rose-600{% endif %} font-semibold">{{ row.after }}%</span>
+            <span class="{% if row.delta > 0 %}text-emerald-600{% else %}text-rose-600{% endif %}">({% if row.delta > 0 %}+{% endif %}{{ row.delta }} pts)</span>
+            <span class="text-zinc-500">after {{ row.minutes_taught }} min of recap</span>
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="surface {% if followup %}mt-6{% else %}mt-8{% endif %} p-5" id="lesson-analysis">
     <p class="text-sm font-medium text-zinc-500">Lesson analysis</p>
     <p class="mt-2 max-w-3xl text-sm leading-relaxed text-zinc-800">{{ analysis.summary }}</p>
-    <div class="mt-5 grid grid-cols-1 gap-6 md:grid-cols-2">
+    <div class="mt-5 grid grid-cols-1 gap-6 md:grid-cols-[2fr_1fr]">
       <div>
         <h2 class="text-sm font-medium tracking-tight">What to improve</h2>
         <ul class="mt-2 flex flex-col gap-2">
@@ -25,14 +45,21 @@
             <li class="text-sm leading-relaxed text-zinc-600">{{ item }}</li>
           {% endfor %}
         </ul>
+        {% with plan=analysis.next_lecture %}
+        {% if plan.recap %}
+        <a href="{% url 'core:next_lecture_plan' lecture.id %}" class="pressable mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-900 px-3 py-2 text-sm font-medium">
+          Next lecture: {{ plan.total_minutes }}-min recap of {{ plan.recap|length }} topic{{ plan.recap|length|pluralize }} →
+        </a>
+        {% endif %}
+        {% endwith %}
       </div>
       <div>
-        <h2 class="text-sm font-medium tracking-tight">Animations to generate</h2>
+        <h2 class="text-sm font-medium tracking-tight text-zinc-500">Self-study animations for students</h2>
         <ul class="mt-2 flex flex-col gap-3">
           {% for item in analysis.animations %}
             <li>
               <p class="text-sm font-medium">{{ item.title }}</p>
-              {% if item.why %}<p class="mt-0.5 text-sm leading-relaxed text-zinc-600">{{ item.why }}</p>{% endif %}
+              {% if item.why %}<p class="mt-0.5 text-xs leading-relaxed text-zinc-500">{{ item.why }}</p>{% endif %}
             </li>
           {% endfor %}
         </ul>
@@ -44,21 +71,22 @@
     <article class="surface h-32 p-4">
       <p class="text-sm font-medium text-zinc-500">Slide Coverage</p>
       <p class="telemetry mt-2 text-2xl font-semibold">{{ stats.slide_coverage }}%</p>
-      <p class="mt-2 text-xs text-zinc-500">Covered in matched lecture audio</p>
+      <p class="mt-2 text-xs text-zinc-500">Slides matched in the lecture audio</p>
     </article>
     <article class="surface h-32 p-4">
       <p class="text-sm font-medium text-zinc-500">Student Check-in Pulse</p>
       <p class="telemetry mt-2 text-2xl font-semibold">{{ pulse_percent }}%</p>
-      <p class="mt-2 text-xs text-zinc-500">Average form comprehension</p>
+      <p class="mt-2 text-xs text-zinc-500">Average comprehension · {{ stats.n_responses }} check-in{{ stats.n_responses|pluralize }}</p>
     </article>
     <article class="surface h-32 border-amber-500 p-4">
       <p class="text-sm font-medium text-zinc-500">PoliTo Exam Risk</p>
       <p class="telemetry mt-2 text-2xl font-semibold text-amber-600">{{ critical_count }} Critical Gap{{ critical_count|pluralize }}</p>
-      <p class="mt-2 text-xs text-zinc-500">High-frequency topics need remediation</p>
+      <p class="mt-2 text-xs text-zinc-500">High-frequency exam topics students did not get</p>
     </article>
   </section>
 
-  <section class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+  <h2 class="mt-10 text-lg font-semibold">Topic by topic</h2>
+  <section class="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
     {% for gap in gaps %}
       {% include "professor/partials/_gap_card.html" with gap=gap %}
     {% empty %}

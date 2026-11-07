@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Lecture {{ lecture.number|add:1 }} Plan — PoliBrige{% endblock %}
+{% block head %}
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff; }
+    .surface { border-color: #d4d4d8; break-inside: avoid; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<main class="mx-auto min-h-screen max-w-[960px] p-6 lg:p-16">
+  <header class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <p class="telemetry text-xs text-zinc-500">{{ lecture.course.code }} · {{ lecture.course.title }}</p>
+      <h1 class="mt-1 text-2xl font-semibold">Plan for Lecture {{ lecture.number|add:1 }}</h1>
+      <p class="text-sm text-zinc-500">Built from Lecture {{ lecture.number }}: what was rushed, what students didn't get, what the exam asks.</p>
+    </div>
+    <div class="no-print flex items-center gap-3">
+      <a href="{% url 'core:professor_dashboard' lecture.id %}" class="pressable rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm">← Feedback</a>
+      <button type="button" onclick="window.print()" class="h-10 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white">Print / Save PDF</button>
+    </div>
+  </header>
+
+  {% if plan.recap %}
+    {% if plan.warm_up_question %}
+    <section class="surface mt-8 p-5">
+      <p class="text-sm font-medium text-zinc-500">Open with (2 min)</p>
+      <p class="mt-2 text-lg font-medium leading-snug">{{ plan.warm_up_question }}</p>
+      <p class="mt-1 text-xs text-zinc-500">Ask for a show of hands before the recap, then again after it.</p>
+    </section>
+    {% endif %}
+
+    <section class="mt-6">
+      <div class="flex items-baseline justify-between">
+        <h2 class="text-lg font-semibold">Recap block</h2>
+        <span class="telemetry text-sm text-zinc-500">{{ plan.total_minutes }} min total</span>
+      </div>
+      <ol class="mt-3 flex flex-col gap-4">
+        {% for item in plan.recap %}
+        <li class="surface p-5 {% if item.severity == 'critical' %}border-amber-500{% endif %}">
+          <div class="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 class="text-base font-semibold">{{ forloop.counter }}. {{ item.topic }}</h3>
+            <span class="telemetry text-sm text-amber-600">{{ item.minutes }} min{% if item.slides %} · slides {{ item.slides }}{% endif %}</span>
+          </div>
+          <p class="mt-1 text-xs text-zinc-500">Why: {{ item.why }}</p>
+          {% if item.actions %}
+          <ul class="mt-3 flex list-disc flex-col gap-1.5 pl-5">
+            {% for action in item.actions %}
+              <li class="text-sm leading-relaxed text-zinc-800">{{ action }}</li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="mt-3 text-sm leading-relaxed text-zinc-800">{{ item.action }}</p>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    {% if plan.student_questions %}
+    <section class="surface mt-6 p-5">
+      <h2 class="text-sm font-medium text-zinc-500">Questions students asked, to answer in class</h2>
+      <ul class="mt-2 flex flex-col gap-1.5">
+        {% for question in plan.student_questions %}
+          <li class="text-sm italic text-zinc-700">“{{ question }}”</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  {% else %}
+    <section class="surface mt-8 p-8 text-center text-sm text-zinc-500">
+      No topic needs a recap: every topic was covered, understood, and paced well. Continue with new material.
+    </section>
+  {% endif %}
+
+  {% if plan.carry_over %}
+  <section class="surface mt-6 p-5">
+    <h2 class="text-sm font-medium text-zinc-500">Carry over: not reached in Lecture {{ lecture.number }}</h2>
+    <ul class="mt-2 flex flex-col gap-1.5">
+      {% for item in plan.carry_over %}
+        <li class="text-sm text-zinc-700">{{ item.topic }}{% if item.slides %} <span class="telemetry text-xs text-zinc-500">· slides {{ item.slides }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <section class="mt-6 rounded-xl bg-zinc-100 p-5">
+    <h2 class="text-sm font-medium text-zinc-500">Already sent to students for self-study</h2>
+    {% if animations %}
+      <ul class="mt-2 flex flex-col gap-1.5">
+        {% for animation in animations %}
+          <li class="text-sm text-zinc-700">📹 {{ animation.title }}{% if animation.exam_link %} <span class="text-xs text-zinc-500">· {{ animation.exam_link }}</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="mt-2 text-sm text-zinc-500">No animations yet. Generate one from a topic card on the feedback page.</p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

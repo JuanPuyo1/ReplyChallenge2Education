@@ -1,34 +1,81 @@
 {% widthratio gap.audio_time_seconds 120 100 as audio_percent %}
-{% widthratio gap.quiz_score 1 100 as quiz_percent %}
 {% widthratio gap.exam_weight 1 100 as exam_percent %}
-<article class="surface flex min-h-[548px] flex-col border-{% if gap.severity == 'critical' %}amber-500{% else %}zinc-200{% endif %} p-4">
+<article class="surface flex flex-col border-{% if gap.severity == 'critical' %}amber-500{% else %}zinc-200{% endif %} p-4">
   <header class="mb-4">
     <div class="flex items-start justify-between gap-3">
       <h2 class="text-xl font-semibold">{{ gap.title }}</h2>
-      <span class="whitespace-nowrap rounded-full bg-zinc-100 px-3 py-1.5 text-xs text-amber-600">{{ gap.exam_frequency }}</span>
+      <span class="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium
+        {% if gap.severity == 'critical' %}bg-amber-100 text-amber-700{% elif gap.severity == 'warning' %}bg-zinc-100 text-amber-600{% else %}bg-emerald-50 text-emerald-700{% endif %}">
+        {{ gap.get_severity_display }}
+      </span>
     </div>
-    <p class="mt-1 text-sm text-zinc-500">{{ gap.get_severity_display }} coverage gap · high exam recurrence</p>
+    <p class="mt-1 text-sm text-zinc-500">
+      {% if gap.evidence.slides %}Slides {{ gap.evidence.slides }} · {% endif %}{{ gap.exam_frequency|default:"No past-exam match" }}
+    </p>
   </header>
 
   <div class="flex flex-col gap-2">
     <div class="inner-surface border border-zinc-200 bg-[#FAFAFA] p-3">
-      <div class="flex justify-between text-sm"><span class="text-zinc-500">Audio Time Spent</span><span class="telemetry text-xs text-amber-600">{{ gap.audio_time_seconds }}s {% if gap.audio_time_seconds < 60 %}(Rushed){% endif %}</span></div>
+      <div class="flex justify-between text-sm"><span class="text-zinc-500">Time taught</span><span class="telemetry text-xs text-amber-600">{{ gap.audio_time_seconds }}s {% if not gap.evidence.covered and gap.evidence %}(Skipped){% elif gap.audio_time_seconds < 60 %}(Rushed){% endif %}</span></div>
       <div class="mt-2 h-1.5 rounded-full bg-zinc-200"><div class="h-full rounded-full bg-amber-500" style="width:min({{ audio_percent }}%,100%)"></div></div>
     </div>
     <div class="inner-surface border border-zinc-200 bg-[#FAFAFA] p-3">
-      <div class="flex justify-between text-sm"><span class="text-zinc-500">Student Quiz Score</span><span class="telemetry text-xs text-rose-600">{{ quiz_percent }}% Correct</span></div>
-      <div class="mt-2 h-1.5 rounded-full bg-zinc-200"><div class="h-full rounded-full bg-rose-500" style="width:{{ quiz_percent }}%"></div></div>
+      {% if gap.quiz_score is not None %}
+        {% widthratio gap.quiz_score 1 100 as quiz_percent %}
+        <div class="flex justify-between text-sm"><span class="text-zinc-500">Student comprehension</span><span class="telemetry text-xs text-rose-600">{{ quiz_percent }}%{% if gap.evidence.n_ratings %} · {{ gap.evidence.n_ratings }} check-in{{ gap.evidence.n_ratings|pluralize }}{% endif %}</span></div>
+        <div class="mt-2 h-1.5 rounded-full bg-zinc-200"><div class="h-full rounded-full bg-rose-500" style="width:{{ quiz_percent }}%"></div></div>
+      {% else %}
+        <div class="flex justify-between text-sm"><span class="text-zinc-500">Student comprehension</span><span class="telemetry text-xs text-zinc-400">no check-ins</span></div>
+        <div class="mt-2 h-1.5 rounded-full bg-zinc-200"></div>
+      {% endif %}
     </div>
     <div class="inner-surface border border-zinc-200 bg-[#FAFAFA] p-3">
-      <div class="flex justify-between text-sm"><span class="text-zinc-500">Qdrant Exam Weight</span><span class="telemetry text-xs text-amber-600">{{ exam_percent }}%</span></div>
+      <div class="flex justify-between text-sm"><span class="text-zinc-500">Exam weight</span><span class="telemetry text-xs text-amber-600">{{ exam_percent }}%</span></div>
       <div class="mt-2 h-1.5 rounded-full bg-zinc-200"><div class="h-full rounded-full bg-slate-900" style="width:{{ exam_percent }}%"></div></div>
     </div>
   </div>
 
-  <div class="mt-4 rounded-lg bg-zinc-100 p-3">
-    <p class="text-sm font-medium">Recommended bridge</p>
-    <p class="mt-1 text-xs text-zinc-500">{{ gap.recommendation }}</p>
+  {% if gap.evidence.lines %}
+  <div class="mt-4">
+    <p class="text-sm font-medium">Evidence</p>
+    <ul class="mt-1 flex flex-col gap-1">
+      {% for line in gap.evidence.lines %}
+        <li class="text-xs leading-relaxed text-zinc-600">{{ line }}</li>
+      {% endfor %}
+    </ul>
   </div>
+  {% endif %}
 
-  {% include "professor/partials/_manim_status.html" with gap=gap %}
+  {% if gap.teaching_actions %}
+  <div class="mt-4 rounded-lg border border-slate-900/10 bg-slate-50 p-3">
+    <p class="text-sm font-medium">Teaching actions for next lecture</p>
+    <ol class="mt-2 flex list-decimal flex-col gap-1.5 pl-4">
+      {% for action in gap.teaching_actions %}
+        <li class="text-sm leading-relaxed text-zinc-700">{{ action }}</li>
+      {% endfor %}
+    </ol>
+  </div>
+  {% endif %}
+
+  {% if gap.evidence.student_questions %}
+  <div class="mt-4">
+    <p class="text-sm font-medium">Questions students asked</p>
+    <ul class="mt-1 flex flex-col gap-1">
+      {% for question in gap.evidence.student_questions %}
+        <li class="text-xs italic leading-relaxed text-zinc-600">“{{ question }}”</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if gap.severity != 'optimal' %}
+  <details class="group mt-4 rounded-lg bg-zinc-100 p-3" {% if gap.manim_status != 'idle' %}open{% endif %}>
+    <summary class="flex cursor-pointer list-none items-center justify-between text-sm font-medium">
+      Student self-study animation
+      <span class="telemetry text-xs text-zinc-500 group-open:hidden">[ expand ]</span>
+    </summary>
+    <p class="mb-3 mt-1 text-xs text-zinc-500">{{ gap.recommendation }}</p>
+    {% include "professor/partials/_manim_status.html" with gap=gap %}
+  </details>
+  {% endif %}
 </article>

@@ -7,10 +7,10 @@
     <span class="flex items-center gap-2 text-xs text-zinc-500"><i class="size-2 rounded-full bg-emerald-500"></i>{{ pulse.students_connected }} connected</span>
   </header>
   <div class="flex items-end justify-between border-t border-zinc-100 pt-3">
-    <span class="text-sm">Confused on current slide</span>
-    <strong class="telemetry text-2xl text-amber-600">{{ pulse.comprehension_percent|default:62 }}%</strong>
+    <span class="text-sm">Class comprehension</span>
+    <strong class="telemetry text-2xl text-amber-600">{% if pulse.students_connected %}{{ pulse.comprehension_percent }}%{% else %}—{% endif %}</strong>
   </div>
   <p class="text-xs text-zinc-500">
-    {% if pulse.top_misconceptions %}Top signal: {{ pulse.top_misconceptions.0 }}.{% else %}Comprehension updates as check-ins arrive.{% endif %}
+    {% if pulse.top_misconceptions %}Most confusing: {{ pulse.top_misconceptions.0 }}.{% else %}Comprehension updates as check-ins arrive.{% endif %}
   </p>
 </section>

@@ -21,6 +21,11 @@ urlpatterns = [
         views.professor_dashboard,
         name="professor_dashboard",
     ),
+    path(
+        "professor/plan/<int:lecture_id>/",
+        views.next_lecture_plan,
+        name="next_lecture_plan",
+    ),
     path("professor/gap/<int:gap_id>/animate/", views.animate_gap, name="animate_gap"),
     path("professor/gap/<int:gap_id>/status/", views.gap_status, name="gap_status"),
     path("student/dashboard/", views.student_dashboard, name="student_dashboard"),

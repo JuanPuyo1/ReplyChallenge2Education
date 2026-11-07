@@ -20,7 +20,18 @@ from agents.llm_client import qdrant_search  # noqa: E402
 mcp = FastMCP("PoliTo-Pulse-MCP")
 
 
-def _slide_fallback() -> list[dict[str, Any]]:
+def _slide_fallback(query: str = "") -> list[dict[str, Any]]:
+    lower = query.lower()
+    if "bode" in lower or "phase" in lower:
+        return [
+            {
+                "text": "Phase margin at the gain crossover omega_c measures relative stability.",
+                "slide_number": 24,
+                "latex_symbols": [r"\omega_c", r"\varphi_m"],
+                "topic": "Bode Phase Margin",
+                "score": 0.92,
+            }
+        ]
     return [
         {
             "text": "Nyquist criterion with imaginary-axis pole indentation; N = Z - P.",
@@ -45,9 +56,53 @@ def search_course_slides(query: str, lecture_id: int = 1, top_k: int = 3) -> lis
                 must=[FieldCondition(key="lecture_id", match=MatchValue(value=lecture_id))]
             ),
         )
-        return hits or _slide_fallback()
+        return hits or _slide_fallback(query)
     except Exception:
-        return _slide_fallback()
+        return _slide_fallback(query)
+
+
+PAST_EXAM_FALLBACK = [
+    (
+        ("indentation", "imaginary"),
+        {
+            "frequency": "Appears in 4/5 Past Appelli",
+            "question": "Apply Nyquist with poles on the imaginary axis.",
+            "point_weight": 8,
+            "year": 2025,
+            "question_number": 3,
+        },
+    ),
+    (
+        ("gain margin",),
+        {
+            "frequency": "Appears in 2/5 Past Appelli",
+            "question": "Read the gain margin from the Bode diagram.",
+            "point_weight": 4,
+            "year": 2023,
+            "question_number": 4,
+        },
+    ),
+    (
+        ("bode", "phase margin"),
+        {
+            "frequency": "Appears in 3/5 Past Appelli",
+            "question": "Compute phase margin and infer damping.",
+            "point_weight": 6,
+            "year": 2024,
+            "question_number": 2,
+        },
+    ),
+    (
+        ("nyquist",),
+        {
+            "frequency": "Appears in 2/5 Past Appelli",
+            "question": "Sketch the Nyquist plot of a given open-loop transfer function.",
+            "point_weight": 4,
+            "year": 2024,
+            "question_number": 1,
+        },
+    ),
+]
 
 
 @mcp.tool
@@ -58,16 +113,11 @@ def match_past_exams(topic_query: str, top_k: int = 3) -> list[dict]:
             return hits
     except Exception:
         pass
-    return [
-        {
-            "frequency": "Appears in 4/5 Past Appelli",
-            "question": "Apply Nyquist with poles on the imaginary axis.",
-            "point_weight": 8,
-            "year": 2025,
-            "question_number": 3,
-            "score": 0.91,
-        }
-    ]
+    lower = topic_query.lower()
+    for keywords, exam in PAST_EXAM_FALLBACK:
+        if any(keyword in lower for keyword in keywords):
+            return [{**exam, "score": 0.9}]
+    return []
 
 
 @mcp.tool

@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from agents.dashboard_agent import compute_stats, display_lesson_brief
+from agents.dashboard_agent import compute_stats, display_lesson_brief, plan_followup
 from agents.listener_agent import process_transcript_chunk
 from core.models import GapAlert, Lecture, StudentCheckIn
 from core.tasks import submit_audit_job, submit_manim_job
@@ -125,8 +125,10 @@ def demo_chunk(request: HttpRequest) -> HttpResponse:
     lecture = get_object_or_404(Lecture, pk=int(request.POST.get("lecture_id", 0)))
     lines = [
         "The Nyquist contour must detour around poles on the imaginary axis as epsilon tends to zero.",
-        "Count clockwise encirclements of minus one and reconcile them with N equals Z minus P.",
-        "At omega c, phase margin links the Bode trace to closed-loop damping.",
+        "Student asks: why do we go around the pole and not through it? "
+        "Quickly, G is undefined there, so let's move on to N equals Z minus P.",
+        "At omega c, phase margin links the Bode trace to closed-loop damping. "
+        "For example, take G of s equals ten over s times s plus two.",
     ]
     seq = lecture.transcripts.count() + 1
     raw = lines[(seq - 1) % len(lines)]
@@ -219,11 +221,29 @@ def professor_dashboard(request: HttpRequest, lecture_id: int) -> HttpResponse:
         "professor/dashboard.html",
         {
             "lecture": lecture,
-            "gaps": lecture.gaps.all(),
+            "gaps": lecture.gaps.select_related("animation"),
             "analysis": display_lesson_brief(lecture, stats),
+            "followup": plan_followup(lecture, stats),
             "stats": stats,
             "critical_count": critical_count,
             "pulse_percent": round((stats["quiz_average"] or 0) * 100),
+        },
+    )
+
+
+@require_GET
+def next_lecture_plan(request: HttpRequest, lecture_id: int) -> HttpResponse:
+    lecture = get_object_or_404(
+        Lecture.objects.select_related("course"), pk=lecture_id
+    )
+    brief = display_lesson_brief(lecture)
+    return render(
+        request,
+        "professor/next_plan.html",
+        {
+            "lecture": lecture,
+            "plan": brief["next_lecture"],
+            "animations": lecture.animations.filter(published=True),
         },
     )
 
@@ -273,20 +293,29 @@ def student_day_content(request: HttpRequest) -> HttpResponse:
 def submit_checkin(request: HttpRequest, lecture_id: int) -> HttpResponse:
     lecture = get_object_or_404(Lecture, pk=lecture_id)
     mapping = {"clear": 1.0, "recap": 0.55, "confused": 0.25}
-    answers = {
-        key: request.POST.get(key, "recap") for key in ("q1", "q2", "q3")
-    }
-    score = sum(mapping.get(answer, 0.55) for answer in answers.values()) / 3
-    misconception = (
-        "Imaginary-axis pole indentation"
-        if any(answer == "confused" for answer in answers.values())
-        else ""
-    )
+    questions = lecture.pulse_questions() or [
+        {"key": key, "text": "", "topic": ""} for key in ("q1", "q2", "q3")
+    ]
+    answers: dict[str, str] = {}
+    by_topic: dict[str, list[float]] = {}
+    misconception = ""
+    for question in questions:
+        key = question["key"]
+        answer = request.POST.get(key, "recap")
+        answers[key] = answer
+        # The form posts the topic it was rendered with, in case questions rotated since.
+        topic = request.POST.get(f"topic_{key}") or question["topic"]
+        if topic:
+            by_topic.setdefault(topic, []).append(mapping.get(answer, 0.55))
+            if answer == "confused" and not misconception:
+                misconception = topic
+    score = sum(mapping.get(answer, 0.55) for answer in answers.values()) / len(answers)
     StudentCheckIn.objects.create(
         lecture=lecture,
         student_ref=request.session.session_key or "demo-student",
         answers=answers,
         score=score,
+        topic_scores={topic: sum(values) / len(values) for topic, values in by_topic.items()},
         misconception=misconception,
     )
     response = render(

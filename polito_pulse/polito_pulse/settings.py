@@ -8,7 +8,14 @@ load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "polito-pulse-demo-secret-change-in-production")
 DEBUG = os.getenv("DJANGO_DEBUG", "1") == "1"
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
+# DEBUG accepts any host so phones on the same Wi-Fi can open the check-in QR link.
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv(
+        "DJANGO_ALLOWED_HOSTS", "*" if DEBUG else "localhost,127.0.0.1,[::1]"
+    ).split(",")
+    if host.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",

@@ -21,6 +21,6 @@
     </div>
   {% else %}
     <button hx-post="{% url 'core:animate_gap' gap.id %}" hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}' hx-target="#manim-slot-{{ gap.id }}" hx-swap="outerHTML"
-            class="h-10 w-full rounded-lg bg-slate-900 text-sm font-medium text-white">[ ✨ Generate Manim Animation ]</button>
+            class="h-10 w-full rounded-lg bg-slate-900 text-sm font-medium text-white">Generate animation &amp; publish to students</button>
   {% endif %}
 </div>

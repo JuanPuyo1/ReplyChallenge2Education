@@ -36,7 +36,52 @@ SYSTEM = """You follow a live university lecture transcript and align it to cour
 Speech recognition may mishear mathematical phonetics. Be literal: only report concepts,
 examples, questions, and clarity problems present in the new window. Repair spoken math
 into inline LaTeX using the exact notation in SLIDE MATCHES. Never invent a slide number.
-Write in the transcript language and return one JSON object."""
+Write in the transcript language and return one JSON object with these keys:
+- cleaned_text: the window with spoken math repaired into inline LaTeX
+- summary: one sentence on what was explained
+- matched_slide_number: slide_number from SLIDE MATCHES, or null
+- similarity_score: 0-1 confidence in that match
+- key_concepts: concepts explicitly explained
+- examples_given: worked examples or concrete cases the professor actually walked through
+- student_questions: questions students asked, verbatim when possible
+- clarity_signals: moments that may confuse students (skipped steps, rushing, undefined symbols)
+- quick_questions: up to 3 short check-in questions about this window for students
+Use empty lists when the window contains none of an item."""
+
+EXAMPLE_MARKERS = ("for example", "for instance", "example", "let's take", "consider")
+RUSH_MARKERS = ("quickly", "let's move on", "skip", "obviously", "trivially")
+
+
+def _detect_signals(raw_text: str) -> dict[str, list[str]]:
+    """Keyword heuristics so the no-API demo still records teaching signals."""
+    sentences = [part.strip() for part in raw_text.replace("?", "?.").split(".") if part.strip()]
+    lower = raw_text.lower()
+    return {
+        "examples_given": [s for s in sentences if any(m in s.lower() for m in EXAMPLE_MARKERS)],
+        "student_questions": [
+            s.split(":", 1)[-1].strip() for s in sentences if s.endswith("?")
+        ],
+        "clarity_signals": (
+            ["Professor moved on quickly; the step may need a recap."]
+            if any(m in lower for m in RUSH_MARKERS)
+            else []
+        ),
+    }
+
+
+FALLBACK_QUESTIONS = {
+    "nyquist": "Why must the Nyquist contour indent around a pole on the imaginary axis?",
+    "bode": "How does the phase margin $\\varphi_m$ relate to closed-loop damping?",
+}
+
+
+def _fallback_question(topic: str) -> str:
+    lower = topic.lower()
+    if "bode" in lower or "phase" in lower:
+        return FALLBACK_QUESTIONS["bode"]
+    if "nyquist" in lower or "contour" in lower:
+        return FALLBACK_QUESTIONS["nyquist"]
+    return f"Could you explain the key idea of {topic} to a classmate?"
 
 
 def should_run_listener(
@@ -60,21 +105,13 @@ def _fallback(raw_text: str, slide_matches: list[dict[str, Any]], duration_ms: i
         "off_plan_topic": None,
         "summary": cleaned,
         "key_concepts": [topic],
-        "examples_given": [],
-        "student_questions": [],
-        "clarity_signals": ["Fast derivation; verify the contour mapping step."]
-        if slide == 18
-        else [],
+        **_detect_signals(raw_text),
         "confidence": score,
         "cleaned_text": cleaned,
         "matched_slide_number": slide,
         "similarity_score": score,
         "time_spent_seconds": max(1, round(duration_ms / 1000)),
-        "quick_questions": [
-            "Why must the Nyquist contour indent around a pole on the imaginary axis?",
-            "What does $N = Z - P$ imply when the closed loop is stable?",
-            "How does $\\varepsilon \\to 0^+$ affect the mapped contour?",
-        ],
+        "quick_questions": [_fallback_question(topic)],
     }
 
 
@@ -134,6 +171,12 @@ def process_transcript_chunk(
         raw_text=raw_text,
         duration_ms=duration_ms,
     )
+    slide = (
+        SlideChunk.objects.filter(lecture=lecture, slide_number=result.matched_slide_number).first()
+        if result.matched_slide_number is not None
+        else None
+    )
+    topic = slide.topic if slide else (result.off_plan_topic or "")
     segment, _ = TranscriptSegment.objects.update_or_create(
         lecture=lecture,
         seq=seq,
@@ -144,16 +187,31 @@ def process_transcript_chunk(
             "cleaned_text": result.cleaned_text or result.summary,
             "matched_slide_number": result.matched_slide_number,
             "similarity_score": result.similarity_score,
+            "signals": {
+                "topic": topic,
+                "key_concepts": result.key_concepts,
+                "examples_given": result.examples_given,
+                "student_questions": result.student_questions,
+                "clarity_signals": result.clarity_signals,
+            },
         },
     )
-    if result.matched_slide_number is not None:
-        SlideChunk.objects.filter(
-            lecture=lecture, slide_number=result.matched_slide_number
-        ).update(
+    if slide:
+        SlideChunk.objects.filter(pk=slide.pk).update(
             time_spent_seconds=F("time_spent_seconds") + result.time_spent_seconds,
             best_similarity=result.similarity_score,
         )
-    if result.quick_questions:
-        lecture.checkin_questions = result.quick_questions[:3]
-        lecture.save(update_fields=["checkin_questions"])
+    if result.quick_questions and topic:
+        update_pulse_questions(lecture, topic, result.quick_questions[0])
     return {"segment_id": segment.id, **result.model_dump()}
+
+
+def update_pulse_questions(lecture, topic: str, question: str) -> None:
+    """Keep one check-in question per recent topic, so the pulse spans the lecture."""
+    others = [
+        {"text": item["text"], "topic": item["topic"]}
+        for item in lecture.pulse_questions()
+        if item["topic"] != topic
+    ]
+    lecture.checkin_questions = (others + [{"text": question, "topic": topic}])[-3:]
+    lecture.save(update_fields=["checkin_questions"])
