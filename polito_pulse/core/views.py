@@ -66,6 +66,12 @@ def login_view(request: HttpRequest) -> HttpResponse:
 
 
 @require_POST
+def logout_view(request: HttpRequest) -> HttpResponse:
+    request.session.flush()
+    return redirect("core:login")
+
+
+@require_POST
 def demo_login(request: HttpRequest, role: str) -> HttpResponse:
     role = "student" if role == "student" else "professor"
     request.session["role"] = role

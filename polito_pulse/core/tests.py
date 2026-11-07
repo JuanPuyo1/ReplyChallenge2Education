@@ -57,6 +57,16 @@ class ProductViewTests(TestCase):
         self.assertEqual(self.client.get(reverse("core:login")).status_code, 200)
         response = self.client.post(reverse("core:demo_login", args=["student"]))
         self.assertRedirects(response, reverse("core:student_dashboard"))
+        self.assertContains(self.client.get(reverse("core:login")), "PoliBrige")
+
+    def test_logout_clears_session_and_returns_to_login(self):
+        self.client.post(reverse("core:demo_login", args=["professor"]))
+        self.assertEqual(self.client.session["role"], "professor")
+        response = self.client.post(reverse("core:logout"))
+        self.assertRedirects(response, reverse("core:login"))
+        self.assertNotIn("role", self.client.session)
+        studio = self.client.get(reverse("core:professor_live"))
+        self.assertContains(studio, "Log out")
 
     def test_professor_live_renders(self):
         response = self.client.get(reverse("core:professor_live"))

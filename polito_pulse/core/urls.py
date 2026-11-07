@@ -7,6 +7,7 @@ app_name = "core"
 urlpatterns = [
     path("", views.home, name="home"),
     path("login", views.login_view, name="login"),
+    path("logout", views.logout_view, name="logout"),
     path("demo-login/<str:role>/", views.demo_login, name="demo_login"),
     path("professor/live/", views.professor_live, name="professor_live"),
     path("professor/live/audio-chunk/", views.audio_chunk, name="audio_chunk"),

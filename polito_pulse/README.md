@@ -1,4 +1,4 @@
-# PoliTo Pulse
+# PoliBrige
 
 Django lecture telemetry, exam-gap auditing, and Manim remediation for Politecnico di Torino.
 
