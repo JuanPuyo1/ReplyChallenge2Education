@@ -80,12 +80,7 @@ def demo_login(request: HttpRequest, role: str) -> HttpResponse:
     )
 
 
-@require_GET
-def professor_live(request: HttpRequest) -> HttpResponse:
-    lecture = _current_lecture()
-    if not lecture:
-        return HttpResponse("Run seed_polito_demo first.", status=503)
-    pulse = get_student_pulse(lecture.id)
+def _studio_response(request: HttpRequest, lecture: Lecture) -> HttpResponse:
     return render(
         request,
         "professor/live_studio.html",
@@ -94,9 +89,25 @@ def professor_live(request: HttpRequest) -> HttpResponse:
             "segments": lecture.transcripts.all(),
             "active_slide": lecture.slides.filter(slide_number=18).first()
             or lecture.slides.first(),
-            "pulse": pulse,
+            "pulse": get_student_pulse(lecture.id),
         },
     )
+
+
+@require_GET
+def professor_live(request: HttpRequest) -> HttpResponse:
+    lecture = _current_lecture()
+    if not lecture:
+        return HttpResponse("Run seed_polito_demo first.", status=503)
+    return _studio_response(request, lecture)
+
+
+@require_GET
+def professor_studio(request: HttpRequest, lecture_id: int) -> HttpResponse:
+    lecture = get_object_or_404(
+        Lecture.objects.select_related("course"), pk=lecture_id
+    )
+    return _studio_response(request, lecture)
 
 
 @require_POST

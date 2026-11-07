@@ -8,7 +8,7 @@
       <p class="text-sm text-zinc-500">Time taught × student comprehension × past-exam importance</p>
     </div>
     <div class="flex items-center gap-3">
-      <a href="{% url 'core:professor_live' %}" class="pressable rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm">Return to Studio</a>
+      <a href="{% url 'core:professor_studio' lecture.id %}" class="pressable rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm">Return to Studio</a>
       <a href="{% url 'core:next_lecture_plan' lecture.id %}" class="pressable rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">Plan Lecture {{ lecture.number|add:1 }} →</a>
       {% include "partials/_logout_button.html" %}
     </div>

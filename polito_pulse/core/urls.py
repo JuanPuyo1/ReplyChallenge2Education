@@ -10,6 +10,11 @@ urlpatterns = [
     path("logout", views.logout_view, name="logout"),
     path("demo-login/<str:role>/", views.demo_login, name="demo_login"),
     path("professor/live/", views.professor_live, name="professor_live"),
+    path(
+        "professor/studio/<int:lecture_id>/",
+        views.professor_studio,
+        name="professor_studio",
+    ),
     path("professor/live/audio-chunk/", views.audio_chunk, name="audio_chunk"),
     path("professor/live/demo-chunk/", views.demo_chunk, name="demo_chunk"),
     path("professor/live/upload-pdf/", views.upload_pdf, name="upload_pdf"),
