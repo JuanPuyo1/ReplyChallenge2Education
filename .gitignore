@@ -1,7 +1,11 @@
 .env
 venv/
+.venv/
 __pycache__/
 cursorrules
 cursorrules.md
 staticfiles/
 logs/
+db.sqlite3
+media/animations/tmp/
+media/animations/generated/

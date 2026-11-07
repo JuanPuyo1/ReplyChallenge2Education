@@ -1,0 +1,35 @@
+{% if submitted %}
+<div id="quiz-form" class="flex min-h-[120px] items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+  <div>
+    <p class="telemetry text-xs text-emerald-700">PULSE RECORDED</p>
+    <h2 class="mt-2 text-base font-semibold">Thanks — your comprehension score is {{ score }}%.</h2>
+    <p class="mt-1 text-xs text-zinc-500">Your anonymous signal is already visible to the professor.</p>
+  </div>
+  <span class="telemetry text-2xl font-semibold text-emerald-600">{{ score }}%</span>
+</div>
+{% else %}
+<form id="quiz-form" hx-post="{% url 'core:submit_checkin' lecture.id %}" hx-swap="outerHTML"
+      class="surface flex flex-col gap-4 p-4 lg:min-h-[120px]">
+  {% csrf_token %}
+  <div class="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+    <div class="min-w-[360px]">
+      <p class="telemetry flex items-center gap-2 text-xs text-rose-600"><span class="size-2 rounded-full bg-rose-600"></span>LIVE CLASS PULSE</p>
+      <h2 class="mt-2 text-base font-semibold">Live Class Pulse: 3 Quick Questions from Lecture {{ lecture.number }}</h2>
+      <p class="mt-1 text-xs text-zinc-500">How clear are today’s key control-theory links?</p>
+    </div>
+    <div class="grid flex-1 grid-cols-1 gap-2 md:grid-cols-3">
+      {% for key in "123" %}
+      <fieldset class="rounded-lg border border-zinc-200 p-2">
+        <legend class="px-1 text-xs text-zinc-500">Question {{ key }}/3</legend>
+        <div class="flex gap-1 text-xs">
+          <label class="cursor-pointer"><input required class="peer sr-only" type="radio" name="q{{ key }}" value="clear"><span class="block rounded-full bg-zinc-100 px-2 py-1 peer-checked:bg-slate-900 peer-checked:text-white">Clear</span></label>
+          <label class="cursor-pointer"><input class="peer sr-only" type="radio" name="q{{ key }}" value="recap"><span class="block rounded-full bg-zinc-100 px-2 py-1 peer-checked:bg-slate-900 peer-checked:text-white">Recap</span></label>
+          <label class="cursor-pointer"><input class="peer sr-only" type="radio" name="q{{ key }}" value="confused"><span class="block rounded-full bg-zinc-100 px-2 py-1 peer-checked:bg-slate-900 peer-checked:text-white">Confused</span></label>
+        </div>
+      </fieldset>
+      {% endfor %}
+    </div>
+    <button class="h-10 shrink-0 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white">Submit Feedback</button>
+  </div>
+</form>
+{% endif %}

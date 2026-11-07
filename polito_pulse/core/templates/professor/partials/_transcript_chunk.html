@@ -1,0 +1,11 @@
+<article class="inner-surface flex min-h-[112px] items-start gap-3 border border-zinc-200 bg-[#FAFAFA] p-4">
+  <div class="min-w-0 flex-1">
+    <time class="telemetry text-xs text-zinc-500">{{ segment.clock }}</time>
+    <p class="mt-2 text-sm leading-5">{{ segment.cleaned_text|default:segment.raw_text }}</p>
+  </div>
+  {% if segment.matched_slide_number %}
+  <span class="telemetry whitespace-nowrap rounded-full bg-zinc-100 px-3 py-1.5 text-xs text-zinc-500">
+    Matched: Slide {{ segment.matched_slide_number }} • {% widthratio segment.similarity_score 1 100 %}%
+  </span>
+  {% endif %}
+</article>

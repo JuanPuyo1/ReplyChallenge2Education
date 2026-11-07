@@ -1,0 +1,16 @@
+<section id="student-pulse"
+         class="surface flex min-h-[220px] flex-col gap-3 border-amber-500 p-4"
+         hx-get="{% url 'core:student_pulse' lecture_id %}"
+         hx-trigger="every 4s" hx-swap="outerHTML">
+  <header class="flex items-center justify-between">
+    <h2 class="text-base font-semibold">Live Student Pulse</h2>
+    <span class="flex items-center gap-2 text-xs text-zinc-500"><i class="size-2 rounded-full bg-emerald-500"></i>{{ pulse.students_connected }} connected</span>
+  </header>
+  <div class="flex items-end justify-between border-t border-zinc-100 pt-3">
+    <span class="text-sm">Confused on current slide</span>
+    <strong class="telemetry text-2xl text-amber-600">{{ pulse.comprehension_percent|default:62 }}%</strong>
+  </div>
+  <p class="text-xs text-zinc-500">
+    {% if pulse.top_misconceptions %}Top signal: {{ pulse.top_misconceptions.0 }}.{% else %}Comprehension updates as check-ins arrive.{% endif %}
+  </p>
+</section>

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Login — PoliTo Pulse{% endblock %}
+{% block content %}
+<main class="min-h-screen flex items-center justify-center p-6">
+  <section class="surface w-full max-w-[400px] p-6 flex flex-col gap-4">
+    <header class="text-center">
+      <h1 class="text-2xl leading-8 font-semibold">PoliTo Pulse</h1>
+      <p class="text-sm text-zinc-500">Live Lecture Telemetry &amp; Manim Studio</p>
+    </header>
+
+    <div id="role-toggle" class="grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1" role="tablist">
+      <button type="button" data-role="professor" class="role-tab h-8 rounded-lg bg-white text-sm font-medium text-zinc-950" aria-selected="true">Professor</button>
+      <button type="button" data-role="student" class="role-tab h-8 rounded-lg text-sm font-medium text-zinc-500" aria-selected="false">Student</button>
+    </div>
+
+    <form method="post" class="flex flex-col gap-3">
+      {% csrf_token %}
+      <input id="role-input" type="hidden" name="role" value="{{ role|default:'professor' }}">
+      <label class="flex flex-col gap-2 text-sm font-medium">
+        Email
+        <input name="email" type="email" placeholder="name@polito.it" class="h-10 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-normal outline-none focus:border-slate-900">
+      </label>
+      <label class="flex flex-col gap-2 text-sm font-medium">
+        Password
+        <input name="password" type="password" placeholder="••••••••" class="h-10 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-normal outline-none focus:border-slate-900">
+      </label>
+      {% if error %}
+      <p class="text-sm text-rose-600">{{ error }}</p>
+      {% endif %}
+      <button class="h-10 rounded-lg bg-slate-900 text-sm font-medium text-white">Continue to Studio</button>
+    </form>
+
+    <div class="flex items-center gap-3">
+      <span class="h-px flex-1 bg-zinc-200"></span>
+      <span class="telemetry text-xs text-zinc-500">DEMO QUICK ACCESS</span>
+      <span class="h-px flex-1 bg-zinc-200"></span>
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <form method="post" action="{% url 'core:demo_login' 'professor' %}">{% csrf_token %}
+        <button class="h-10 w-full rounded-lg border border-zinc-200 bg-white text-xs">1-Click Judge Login: Prof</button>
+      </form>
+      <form method="post" action="{% url 'core:demo_login' 'student' %}">{% csrf_token %}
+        <button class="h-10 w-full rounded-lg border border-zinc-200 bg-white text-xs">1-Click Judge Login: Student</button>
+      </form>
+    </div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.querySelectorAll('.role-tab').forEach(tab => tab.addEventListener('click', () => {
+    document.querySelectorAll('.role-tab').forEach(item => {
+      const active = item === tab;
+      item.classList.toggle('bg-white', active);
+      item.classList.toggle('text-zinc-950', active);
+      item.classList.toggle('text-zinc-500', !active);
+      item.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    document.getElementById('role-input').value = tab.dataset.role;
+  }));
+</script>
+{% endblock %}

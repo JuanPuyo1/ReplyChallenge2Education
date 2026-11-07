@@ -1,0 +1,26 @@
+<div id="manim-slot-{{ gap.id }}" class="mt-auto">
+  {% if gap.manim_status == "completed" and gap.animation %}
+    <video class="aspect-video w-full rounded-lg bg-zinc-950 outline outline-1 -outline-offset-1 outline-black/10"
+           src="{{ gap.animation.video_url }}" autoplay loop muted playsinline controls></video>
+    <div class="mt-3 flex h-10 items-center justify-center rounded-lg bg-emerald-500 text-sm font-medium text-white">
+      Published to Student Portal ✓
+    </div>
+  {% elif gap.manim_status == "failed" %}
+    <div class="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{{ gap.task_error|truncatechars:220 }}</div>
+    <button hx-post="{% url 'core:animate_gap' gap.id %}" hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}' hx-target="#manim-slot-{{ gap.id }}" hx-swap="outerHTML"
+            class="mt-3 h-10 w-full rounded-lg bg-slate-900 text-sm font-medium text-white">Retry Manim Render</button>
+  {% elif gap.manim_status != "idle" %}
+    <div hx-get="{% url 'core:gap_status' gap.id %}" hx-trigger="every 2s" hx-swap="outerHTML"
+         class="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+      <div class="mb-3 h-2 overflow-hidden rounded-full bg-zinc-200">
+        <div class="h-full w-2/3 animate-pulse rounded-full bg-slate-900"></div>
+      </div>
+      <p class="telemetry text-xs text-zinc-500">
+        {% if gap.manim_status == "extracting_notation" %}Extracting exact slide notation…{% else %}Rendering Manim -ql…{% endif %}
+      </p>
+    </div>
+  {% else %}
+    <button hx-post="{% url 'core:animate_gap' gap.id %}" hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}' hx-target="#manim-slot-{{ gap.id }}" hx-swap="outerHTML"
+            class="h-10 w-full rounded-lg bg-slate-900 text-sm font-medium text-white">[ ✨ Generate Manim Animation ]</button>
+  {% endif %}
+</div>

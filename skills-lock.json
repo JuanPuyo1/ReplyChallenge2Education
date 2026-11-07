@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "better-ui": {
+      "source": "jakubkrehel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/better-ui/SKILL.md",
+      "computedHash": "4d6e56d526c674b1f21a5acfab1599627e9d829d225e728e52b5bd9fb1005b9d"
+    },
+    "emil-design-eng": {
+      "source": "emilkowalski/skills",
+      "sourceType": "github",
+      "skillPath": "skills/emil-design-eng/SKILL.md",
+      "computedHash": "74e0ede3a72c476a4c293e1e34d75fa1713f83bdc5c6c1cd76f1002fc564ecc6"
+    }
+  }
+}

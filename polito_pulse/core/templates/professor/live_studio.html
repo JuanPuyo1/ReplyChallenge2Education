@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Live Studio — PoliTo Pulse{% endblock %}
+{% block content %}
+<header class="flex h-16 items-center justify-between border-b border-zinc-200 bg-white px-6 lg:px-16">
+  <h1 class="text-base font-semibold">{{ lecture.course.code }} • {{ lecture.course.title }} — Lecture {{ lecture.number }}</h1>
+  <div class="hidden items-center gap-2 rounded-full bg-zinc-100 px-3 py-2 text-xs text-zinc-500 md:flex">
+    <span class="size-2 rounded-full bg-emerald-500"></span>
+    Qdrant RAG: {{ lecture.course.slide_count }} Slides &amp; {{ lecture.course.past_exam_count }} Past Exams Synced
+  </div>
+  <div class="flex gap-2">
+    <label class="pressable flex h-10 cursor-pointer items-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium">
+      Upload PDF
+      <input id="pdf-input" type="file" accept=".pdf" class="hidden">
+    </label>
+    <button hx-get="{% url 'core:qr_modal' %}" hx-target="#qr-content" hx-swap="innerHTML"
+            class="h-10 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium"
+            onclick="document.getElementById('qr-dialog').showModal()">Show Student Check-in QR</button>
+  </div>
+</header>
+
+<main class="mx-auto flex max-w-[1440px] flex-col items-center gap-6 px-4 pb-8 pt-6 lg:px-16">
+  <section class="flex min-h-14 w-full max-w-[980px] flex-wrap items-center gap-4 rounded-xl bg-[#111113] px-4 py-2 text-white">
+    <div class="flex items-center gap-2">
+      <span id="live-dot" class="size-2.5 rounded-full bg-rose-600"></span>
+      <span id="recording-timer" class="telemetry text-sm">00:00:00</span>
+    </div>
+    <svg id="waveform" class="h-8 min-w-[180px] flex-1" viewBox="0 0 196 32" aria-label="Live audio waveform">
+      <g id="wave-bars"></g>
+    </svg>
+    <button class="h-9 rounded-lg bg-zinc-600 px-3 text-xs" type="button">Push Micro-Quiz</button>
+    <button id="record-button" class="h-9 rounded-lg border border-zinc-600 px-3 text-xs" type="button">Start Microphone</button>
+    <button id="demo-button" class="h-9 rounded-lg border border-zinc-600 px-3 text-xs" type="button">Simulate Live Audio Stream</button>
+    <button hx-post="{% url 'core:end_audit' lecture.id %}" hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}'
+            class="h-9 rounded-lg bg-white px-3 text-xs text-zinc-950">End &amp; Run Gap Audit</button>
+  </section>
+
+  <section class="grid w-full max-w-[1280px] grid-cols-1 gap-6 xl:grid-cols-[780px_476px]">
+    <div class="surface flex min-h-[700px] flex-col gap-3 p-4">
+      <header class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-semibold">Live Transcript Stream</h2>
+          <p class="text-xs text-zinc-500">Cleaned audio chunks · LaTeX preserved</p>
+        </div>
+        <span class="telemetry rounded-full bg-zinc-100 px-3 py-1.5 text-xs text-zinc-500">
+          <span id="chunk-count">{{ segments|length }}</span> chunks matched
+        </span>
+      </header>
+      <div id="transcript-feed" class="flex flex-1 flex-col gap-3 overflow-y-auto overscroll-contain">
+        {% for segment in segments %}
+          {% include "professor/partials/_transcript_chunk.html" with segment=segment %}
+        {% empty %}
+          <div id="empty-transcript" class="inner-surface flex flex-1 items-center justify-center border border-dashed border-zinc-200 text-sm text-zinc-400">Start the microphone or demo stream.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <aside class="flex flex-col gap-6">
+      <section class="surface flex h-[432px] flex-col gap-3 p-4">
+        <header class="flex items-center justify-between">
+          <h2 class="text-base font-semibold">Active Slide</h2>
+          <span class="telemetry rounded-full bg-zinc-100 px-3 py-1.5 text-xs text-zinc-500">PDF · Slide {{ active_slide.slide_number }}</span>
+        </header>
+        <div class="inner-surface flex flex-1 flex-col justify-center gap-4 border border-zinc-200 bg-[#FAFAFA] p-6">
+          <div>
+            <h3 class="text-xl font-semibold">{{ active_slide.topic }}</h3>
+            <p class="text-sm text-zinc-500">Imaginary-axis pole indentation</p>
+          </div>
+          <div class="flex h-28 items-center justify-center gap-4">
+            <div class="inner-surface flex h-24 w-[120px] flex-col items-center justify-center gap-2 border border-zinc-200 bg-white">
+              <span class="telemetry text-xs text-zinc-500">s-plane</span><b class="text-xl">jω ↗</b>
+            </div>
+            <span class="h-0.5 w-14 bg-slate-900"></span>
+            <div class="inner-surface flex h-24 w-[120px] flex-col items-center justify-center gap-2 border border-zinc-200 bg-white">
+              <span class="telemetry text-xs text-zinc-500">G(s)H(s)</span><b class="text-xl text-rose-600">−1 ⟳</b>
+            </div>
+          </div>
+          <p class="telemetry text-sm">$N = Z - P$</p>
+        </div>
+      </section>
+      {% include "professor/partials/_student_pulse.html" with pulse=pulse lecture_id=lecture.id %}
+    </aside>
+  </section>
+</main>
+
+<dialog id="qr-dialog" class="surface m-auto w-[360px] overflow-hidden p-0 backdrop:bg-slate-900/30">
+  <div id="qr-content"><div class="p-8 text-center text-sm text-zinc-500">Generating QR code…</div></div>
+</dialog>
+<div id="upload-result" class="hidden"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const lectureId = {{ lecture.id }};
+  const feed = document.getElementById('transcript-feed');
+  const barsGroup = document.getElementById('wave-bars');
+  const ns = 'http://www.w3.org/2000/svg';
+  const bars = Array.from({length: 24}, (_, i) => {
+    const bar = document.createElementNS(ns, 'rect');
+    bar.setAttribute('x', String(i * 8 + 2)); bar.setAttribute('y', '12');
+    bar.setAttribute('width', '4'); bar.setAttribute('height', '8'); bar.setAttribute('rx', '2');
+    bar.setAttribute('fill', i % 3 === 0 ? '#E11D48' : '#52525B');
+    barsGroup.appendChild(bar); return bar;
+  });
+  let stream, recorder, analyser, waveformFrame, rotationTimer, timerInterval, startedAt, seq = {{ segments|length }};
+  let demoInterval = null;
+
+  function appendChunk(html) {
+    document.getElementById('empty-transcript')?.remove();
+    feed.insertAdjacentHTML('beforeend', html);
+    htmx.process(feed.lastElementChild);
+    renderMath(feed.lastElementChild);
+    feed.scrollTop = feed.scrollHeight;
+    document.getElementById('chunk-count').textContent = String(feed.children.length);
+  }
+  function updateTimer() {
+    const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+    const h = String(Math.floor(elapsed / 3600)).padStart(2,'0');
+    const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2,'0');
+    const s = String(elapsed % 60).padStart(2,'0');
+    document.getElementById('recording-timer').textContent = `${h}:${m}:${s}`;
+  }
+  function drawWave() {
+    if (!analyser) return;
+    const values = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(values);
+    bars.forEach((bar, i) => {
+      const height = Math.max(4, (values[i * 2] || 0) / 255 * 28);
+      bar.setAttribute('height', height.toFixed(1));
+      bar.setAttribute('y', ((32-height)/2).toFixed(1));
+    });
+    waveformFrame = requestAnimationFrame(drawWave);
+  }
+  async function uploadBlob(blob) {
+    const form = new FormData();
+    form.append('audio', blob, `lecture-${lectureId}-${++seq}.webm`);
+    form.append('lecture_id', lectureId); form.append('seq', seq);
+    form.append('start_ms', (seq - 1) * 15000); form.append('duration_ms', 15000);
+    const response = await fetch('{% url "core:audio_chunk" %}', {
+      method: 'POST', body: form, headers: {'X-CSRFToken': csrfToken()}
+    });
+    if (!response.ok) throw new Error(await response.text());
+    appendChunk(await response.text());
+  }
+  function beginRecorderCycle() {
+    recorder = new MediaRecorder(stream, {mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm'});
+    const chunks = [];
+    recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+    recorder.onstop = async () => {
+      clearTimeout(rotationTimer);
+      const completedBlob = chunks.length ? new Blob(chunks, {type: recorder.mimeType}) : null;
+      if (stream?.active) beginRecorderCycle();
+      if (completedBlob) {
+        try { await uploadBlob(completedBlob); }
+        catch (error) { toast.fire({icon:'error', title:error.message}); }
+      }
+    };
+    recorder.start();
+    rotationTimer = setTimeout(() => recorder.state === 'recording' && recorder.stop(), 15000);
+  }
+  async function startRecording() {
+    stream = await navigator.mediaDevices.getUserMedia({audio: true});
+    const context = new AudioContext();
+    analyser = context.createAnalyser(); analyser.fftSize = 128;
+    context.createMediaStreamSource(stream).connect(analyser);
+    startedAt = Date.now(); timerInterval = setInterval(updateTimer, 1000);
+    drawWave(); beginRecorderCycle();
+    document.getElementById('record-button').textContent = 'Stop Microphone';
+  }
+  function stopRecording() {
+    clearTimeout(rotationTimer); clearInterval(timerInterval); cancelAnimationFrame(waveformFrame);
+    if (recorder?.state === 'recording') recorder.stop();
+    stream?.getTracks().forEach(track => track.stop());
+    stream = null; document.getElementById('record-button').textContent = 'Start Microphone';
+  }
+  document.getElementById('record-button').addEventListener('click', async () => {
+    if (stream) return stopRecording();
+    try { await startRecording(); } catch { toast.fire({icon:'error', title:'Microphone unavailable. Use the demo stream.'}); }
+  });
+  async function demoTick() {
+    const form = new FormData(); form.append('lecture_id', lectureId);
+    const response = await fetch('{% url "core:demo_chunk" %}', {method:'POST', body:form, headers:{'X-CSRFToken':csrfToken()}});
+    appendChunk(await response.text());
+  }
+  document.getElementById('demo-button').addEventListener('click', () => {
+    if (demoInterval) {
+      clearInterval(demoInterval); demoInterval = null;
+      document.getElementById('demo-button').textContent = 'Simulate Live Audio Stream';
+      return;
+    }
+    demoTick(); demoInterval = setInterval(demoTick, 4000);
+    document.getElementById('demo-button').textContent = 'Stop Demo Stream';
+  });
+  document.getElementById('pdf-input').addEventListener('change', async event => {
+    const file = event.target.files[0]; if (!file) return;
+    const form = new FormData(); form.append('pdf', file); form.append('lecture_id', lectureId);
+    const response = await fetch('{% url "core:upload_pdf" %}', {method:'POST', body:form, headers:{'X-CSRFToken':csrfToken()}});
+    toast.fire({icon: response.ok ? 'success' : 'error', title: await response.text()});
+  });
+})();
+</script>
+{% endblock %}

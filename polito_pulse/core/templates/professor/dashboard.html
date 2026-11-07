@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Gap Audit — PoliTo Pulse{% endblock %}
+{% block content %}
+<main class="mx-auto min-h-screen max-w-[1440px] p-6 lg:p-16">
+  <header class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold">Lecture {{ lecture.number }} — Feedback &amp; Gap Audit</h1>
+      <p class="text-sm text-zinc-500">Audio coverage × student pulse × past-exam importance</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="{% url 'core:professor_live' %}" class="pressable rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm">Return to Studio</a>
+      <span class="telemetry rounded-full bg-zinc-100 px-3 py-1.5 text-xs text-zinc-500">/professor/dashboard</span>
+    </div>
+  </header>
+
+  <section class="mt-4 grid grid-cols-1 gap-6 md:grid-cols-3">
+    <article class="surface h-32 p-4">
+      <p class="text-sm font-medium text-zinc-500">Slide Coverage</p>
+      <p class="telemetry mt-2 text-2xl font-semibold">{{ stats.slide_coverage }}%</p>
+      <p class="mt-2 text-xs text-zinc-500">Covered in matched lecture audio</p>
+    </article>
+    <article class="surface h-32 p-4">
+      <p class="text-sm font-medium text-zinc-500">Student Check-in Pulse</p>
+      <p class="telemetry mt-2 text-2xl font-semibold">{{ pulse_percent }}%</p>
+      <p class="mt-2 text-xs text-zinc-500">Average form comprehension</p>
+    </article>
+    <article class="surface h-32 border-amber-500 p-4">
+      <p class="text-sm font-medium text-zinc-500">PoliTo Exam Risk</p>
+      <p class="telemetry mt-2 text-2xl font-semibold text-amber-600">{{ critical_count }} Critical Gap{{ critical_count|pluralize }}</p>
+      <p class="mt-2 text-xs text-zinc-500">High-frequency topics need remediation</p>
+    </article>
+  </section>
+
+  <section class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+    {% for gap in gaps %}
+      {% include "professor/partials/_gap_card.html" with gap=gap %}
+    {% empty %}
+      <div class="surface col-span-full p-12 text-center text-zinc-500">The background gap audit is running. Refresh in a moment.</div>
+    {% endfor %}
+  </section>
+</main>
+{% endblock %}

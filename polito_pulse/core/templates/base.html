@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en" data-theme="polito">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}PoliTo Pulse{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Josefin+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/dist/full.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: { sans: ['Josefin Sans', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+        colors: { canvas: '#FAFAFA', ink: '#111113', primary: '#0F172A', live: '#E11D48', gap: '#D97706', mastered: '#10B981' }
+      }}
+    };
+  </script>
+  <style>
+    :root {
+      --rounded-box: 1rem;
+      --rounded-btn: .625rem;
+      --color-bg-canvas: #FAFAFA;
+      --color-bg-surface: #FFFFFF;
+      --color-border: #E4E4E7;
+      --ease-out: cubic-bezier(.22,1,.36,1);
+    }
+    * { box-sizing: border-box; }
+    body { background: var(--color-bg-canvas); color: #111113; font-family: "Josefin Sans", sans-serif; }
+    h1,h2,h3 { letter-spacing: -.02em; }
+    p { line-height: 1.5; }
+    button, .pressable {
+      transition-property: transform, background-color, border-color, color, opacity;
+      transition-duration: 150ms;
+      transition-timing-function: var(--ease-out);
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:not(:disabled):active, .pressable:active { transform: scale(.98); }
+    .telemetry { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
+    .surface { background: #fff; border: 1px solid rgba(228,228,231,.8); border-radius: 1rem; }
+    .inner-surface { border-radius: .5rem; }
+    dialog::backdrop { background: rgba(15,23,42,.28); backdrop-filter: blur(2px); }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 1ms !important; animation-duration: 1ms !important; }
+      button:not(:disabled):active, .pressable:active { transform: none; opacity: .82; }
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body class="min-h-screen bg-[#FAFAFA] antialiased" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  {% csrf_token %}
+  {% block content %}{% endblock %}
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <script>
+    const toast = Swal.mixin({
+      toast: true, position: 'bottom-end', showConfirmButton: false, timer: 3500,
+      customClass: { popup: '!bg-zinc-900 !text-white !font-sans !rounded-xl !border !border-zinc-800 !shadow-lg' }
+    });
+    function renderMath(root = document.body) {
+      if (!window.renderMathInElement) return;
+      renderMathInElement(root, { delimiters: [
+        {left: '$$', right: '$$', display: true},
+        {left: '$', right: '$', display: false}
+      ], throwOnError: false });
+    }
+    document.addEventListener('DOMContentLoaded', () => renderMath());
+    document.body.addEventListener('htmx:configRequest', (evt) => {
+      evt.detail.headers['X-CSRFToken'] = csrfToken();
+    });
+    document.body.addEventListener('htmx:afterSwap', (evt) => {
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!reduce) {
+        gsap.fromTo(evt.detail.elt,
+          { opacity: 0, y: 8, filter: 'blur(4px)' },
+          { opacity: 1, y: 0, filter: 'blur(0px)', duration: .35, ease: 'power3.out' });
+      }
+      renderMath(evt.detail.elt);
+    });
+    ['manimReady', 'auditComplete', 'quizSubmitted'].forEach(name => {
+      document.body.addEventListener(name, event => {
+        toast.fire({ icon: name === 'auditComplete' ? 'info' : 'success',
+          title: event.detail?.message || event.detail?.value?.message || 'Updated' });
+      });
+    });
+    function csrfToken() {
+      return document.querySelector('[name=csrfmiddlewaretoken]')?.value
+        || document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1]
+        || '{{ csrf_token }}';
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

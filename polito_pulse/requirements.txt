@@ -1,0 +1,12 @@
+django>=5.1,<6
+qdrant-client>=1.12
+openai>=1.55
+anthropic>=0.40
+fastmcp>=2.0
+pymupdf4llm>=0.0.17
+pymupdf>=1.24
+manim>=0.19
+python-dotenv>=1.0
+pydantic>=2.9
+qrcode[pil]>=8.0
+imageio-ffmpeg>=0.5
